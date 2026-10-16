@@ -1,0 +1,101 @@
+Folder PATH listing
+Volume serial number is 405B-9A33
+C:.
+|   chat.db
+|   Notes.txt
+|   requirements.txt
+|   run.py
+|   tree.txt
+|   
++---app
+|   |   auth.py
+|   |   config.py
+|   |   connection_manager.py
+|   |   db.py
+|   |   main.py
+|   |   messages_repo.py
+|   |   profile_repo.py
+|   |   static_files.py
+|   |   utils.py
+|   |   ws.py
+|   |   __init__.py
+|   |   
+|   +---routes
+|   |   |   auth_routes.py
+|   |   |   dm.py
+|   |   |   messages.py
+|   |   |   rooms.py
+|   |   |   uploads.py
+|   |   |   users.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           auth_routes.cpython-314.pyc
+|   |           dm.cpython-314.pyc
+|   |           messages.cpython-314.pyc
+|   |           rooms.cpython-314.pyc
+|   |           uploads.cpython-314.pyc
+|   |           users.cpython-314.pyc
+|   |           __init__.cpython-314.pyc
+|   |           
+|   \---__pycache__
+|           auth.cpython-314.pyc
+|           config.cpython-314.pyc
+|           connection_manager.cpython-314.pyc
+|           db.cpython-314.pyc
+|           main.cpython-314.pyc
+|           messages_repo.cpython-314.pyc
+|           profile_repo.cpython-314.pyc
+|           static_files.cpython-314.pyc
+|           utils.cpython-314.pyc
+|           ws.cpython-314.pyc
+|           __init__.cpython-314.pyc
+|           
++---report_diagrams
+|       01_sdlc.dot
+|       01_sdlc.png
+|       02_dfd_level0.dot
+|       02_dfd_level0.png
+|       03_dfd_level1.dot
+|       03_dfd_level1.png
+|       04_gantt_chart.png
+|       04_gantt_chart.puml
+|       05_use_case.png
+|       05_use_case.puml
+|       06_class_diagram.png
+|       06_class_diagram.puml
+|       07_sequence_diagram.png
+|       07_sequence_diagram.puml
+|       08_activity_diagram.png
+|       08_activity_diagram.puml
+|       09_deployment_diagram.png
+|       09_deployment_diagram.puml
+|       10_er_diagram.png
+|       10_er_diagram.puml
+|       plantuml.jar
+|       update_report.py
+|       
++---static
+|   |   index.html
+|   |   
+|   +---css
+|   |       style.css
+|   |       
+|   \---js
+|           app.js
+|           auth.js
+|           chat.js
+|           directory.js
+|           ephemeral.js
+|           notifications.js
+|           rooms.js
+|           ui-shell.js
+|           utils.js
+|           
++---tests
+|   |   test_main.py
+|   |   
+|   \---__pycache__
+|           test_main.cpython-314-pytest-9.1.1.pyc
+|           
+\---uploads

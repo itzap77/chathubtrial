@@ -1,0 +1,4 @@
+fastapi
+aiosqlite
+uvicorn[standard]
+python-multipart

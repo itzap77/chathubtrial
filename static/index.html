@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+<meta name="theme-color" content="#090a0f" />
+<title>ChatHub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script>
+  (function(){
+    try {
+      var savedTheme = localStorage.getItem("chathub_theme") || "dark";
+      var savedAccent = localStorage.getItem("chathub_accent") || "indigo";
+      var savedDensity = localStorage.getItem("chathub_density") || "cozy";
+      document.documentElement.setAttribute("data-theme", savedTheme);
+      document.documentElement.setAttribute("data-accent", savedAccent);
+      document.documentElement.setAttribute("data-density", savedDensity);
+    } catch(e) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  })();
+</script>
+</head>
+<body>
+<div class="app">
+  <div class="toast-container" id="toasts"></div>
+
+  <!-- Incoming Call Banner / Modal (Rejectable & Acceptable) -->
+  <div class="incoming-call-banner" id="incomingCallBanner">
+    <div class="call-banner-info">
+      <div class="call-avatar" id="incomingCallAvatar">📞</div>
+      <div class="call-banner-text">
+        <span class="call-caller-name" id="incomingCallerName">@user</span>
+        <span class="call-banner-sub" id="incomingCallType">Incoming Call…</span>
+      </div>
+    </div>
+    <div class="call-banner-actions">
+      <button class="call-btn-accept" id="btnAcceptCall" title="Accept Call">✓ Accept</button>
+      <button class="call-btn-decline" id="btnDeclineCall" title="Decline Call">✕ Decline</button>
+    </div>
+  </div>
+
+  <!-- In-App WebRTC Video / Audio Call HUD -->
+  <div class="call-overlay" id="callOverlay">
+    <div class="call-modal" id="callModal">
+      <div class="call-header">
+        <div class="call-meta">
+          <span class="call-mode-badge" id="callModeBadge">Voice Call</span>
+          <span class="call-target" id="callTargetName">@user</span>
+          <span class="call-status" id="callStatusText">Connecting…</span>
+          <span class="call-quality-badge" id="callQualityBadge" style="display:none">🟢 HD P2P</span>
+        </div>
+        <div class="call-header-actions">
+          <button class="call-header-btn" id="callBtnDevices" onclick="WebRTC.toggleDeviceSettings()" title="Audio &amp; Video Hardware Settings">⚙️</button>
+          <button class="call-header-btn" id="callBtnPip" onclick="WebRTC.togglePip()" title="Minimize to PiP (keep chatting)">🗕</button>
+          <button class="call-header-btn" id="callBtnFullscreen" onclick="WebRTC.toggleFullscreen()" title="Fullscreen">⛶</button>
+          <button class="call-close-btn" onclick="WebRTC.endCall(true)" title="Hang Up">✕</button>
+        </div>
+      </div>
+
+      <!-- In-call Video Stage (Shown in video / screen share mode) -->
+      <div class="call-video-stage" id="callVideoStage">
+        <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
+        <div class="local-video-wrap" id="localVideoWrap">
+          <video id="localVideo" class="local-video" autoplay playsinline muted></video>
+          <span class="local-video-label">You</span>
+        </div>
+      </div>
+
+      <!-- Dedicated Voice Call Stage (Shown in audio mode) -->
+      <div class="call-audio-stage" id="callAudioStage" style="display:none">
+        <div class="call-audio-avatar" id="callAudioAvatar">📞</div>
+        <div class="call-audio-target-row">
+          <span class="call-audio-target" id="callAudioTarget">@user</span>
+          <span class="call-audio-sub" id="callAudioSub">Encrypted HD Voice</span>
+        </div>
+        <div class="call-audio-waves" id="callAudioWaves">
+          <span class="audio-wave"></span>
+          <span class="audio-wave"></span>
+          <span class="audio-wave"></span>
+          <span class="audio-wave"></span>
+          <span class="audio-wave"></span>
+          <span class="audio-wave"></span>
+          <span class="audio-wave"></span>
+        </div>
+        <!-- Voice-call prompt to request video/screen share -->
+        <div class="voice-upgrade-prompt">
+          <span>Voice call active · You can turn on your camera or share your screen below</span>
+        </div>
+      </div>
+
+      <!-- Mid-Call Media Upgrade Request (Acceptable & Rejectable) -->
+      <div class="call-upgrade-prompt-card" id="callUpgradePrompt" style="display:none">
+        <div class="upgrade-prompt-icon" id="upgradePromptIcon">📹</div>
+        <div class="upgrade-prompt-body">
+          <div class="upgrade-prompt-title" id="upgradePromptTitle">Video Call Request</div>
+          <div class="upgrade-prompt-sub" id="upgradePromptSub">@user wants to switch to Video</div>
+        </div>
+        <div class="upgrade-prompt-actions">
+          <button class="upgrade-btn-accept" id="btnAcceptUpgrade" onclick="WebRTC.respondUpgradeRequest(true)" title="Accept Request">✓ Accept</button>
+          <button class="upgrade-btn-decline" id="btnDeclineUpgrade" onclick="WebRTC.respondUpgradeRequest(false)" title="Decline Request">✕ Decline</button>
+        </div>
+      </div>
+
+      <!-- Inbuilt Media Device Selection Drawer/Panel -->
+      <div class="call-device-settings-panel" id="callDeviceSettingsPanel" style="display:none">
+        <div class="device-panel-header">
+          <div class="device-panel-title">
+            <svg viewBox="0 0 24 24" class="device-icon"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Audio &amp; Video Hardware Settings</span>
+          </div>
+          <button class="device-panel-close" onclick="WebRTC.toggleDeviceSettings()" title="Close Settings">✕</button>
+        </div>
+
+        <div class="device-field-group">
+          <label class="device-label">
+            <span>MICROPHONE (AUDIO INPUT)</span>
+            <span class="device-sublabel" id="micLiveMeter">● Active</span>
+          </label>
+          <div class="device-select-wrap">
+            <select id="callSelectMic" class="device-select" onchange="WebRTC.switchAudioInput(this.value)"></select>
+          </div>
+        </div>
+
+        <div class="device-field-group">
+          <label class="device-label">
+            <span>CAMERA (VIDEO INPUT)</span>
+            <span class="device-sublabel" id="camStatusTag">Hardware</span>
+          </label>
+          <div class="device-select-wrap">
+            <select id="callSelectCam" class="device-select" onchange="WebRTC.switchVideoInput(this.value)"></select>
+          </div>
+        </div>
+
+        <div class="device-field-group">
+          <label class="device-label">
+            <span>SPEAKER (AUDIO OUTPUT)</span>
+            <button class="device-test-btn" onclick="WebRTC.testSpeakerOutput()">🔔 Test</button>
+          </label>
+          <div class="device-select-wrap">
+            <select id="callSelectSpeaker" class="device-select" onchange="WebRTC.switchAudioOutput(this.value)"></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls Bar -->
+      <div class="call-controls-bar">
+        <button class="call-ctrl-btn" id="callBtnMute" onclick="WebRTC.toggleMute()" title="Mute/Unmute Microphone">🎤</button>
+        <button class="call-ctrl-btn" id="callBtnCam" onclick="WebRTC.toggleVideo()" title="Turn On/Off Camera">📷</button>
+        <button class="call-ctrl-btn" id="callBtnScreen" onclick="WebRTC.toggleScreenShare()" title="Share Screen">🖥️</button>
+        <button class="call-ctrl-btn call-upgrade-btn" id="callBtnUpgradeVideo" onclick="WebRTC.requestOrEnableVideo()" title="Request/Start Video">📹 Video</button>
+        <button class="call-ctrl-btn" id="callBtnSettings" onclick="WebRTC.toggleDeviceSettings()" title="Media Devices &amp; Hardware">⚙️</button>
+        <button class="call-ctrl-btn call-hangup" onclick="WebRTC.endCall(true)" title="End Call">📞 Hang Up</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Modal -->
+  <div id="authOverlay" class="overlay open">
+    <div class="modal">
+      <div class="auth-hero">
+        <div class="logo-box">
+          <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        </div>
+        <h2 id="authHeading">Welcome to ChatHub</h2>
+        <p id="authSub">Encrypted private messaging pipeline</p>
+      </div>
+
+      <div class="tabs">
+        <button id="authTabLogin" class="tab active" onclick="setAuthTab('login')">Sign In</button>
+        <button id="authTabReg" class="tab" onclick="setAuthTab('register')">Register</button>
+      </div>
+
+      <div class="field">
+        <label>USERNAME</label>
+        <input id="authUser" autocomplete="username" placeholder="e.g. avinash" />
+      </div>
+      <div class="field">
+        <label>PASSWORD</label>
+        <div class="pw-field">
+          <input id="authPass" type="password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitAuth()" />
+          <button type="button" class="pw-eye-btn" onclick="togglePasswordVisibility('authPass', this)" title="Show password">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <button id="authSubmitBtn" class="btn-primary" onclick="submitAuth()">Sign In</button>
+
+      <button class="btn-ephemeral" onclick="openOverlay('ephemeralOverlay')">
+        <span class="btn-icon-symbol">⚡</span> Quick Disposable Room (No Sign In)
+      </button>
+    </div>
+  </div>
+
+  <!-- Ephemeral Room Modal -->
+  <div id="ephemeralOverlay" class="overlay">
+    <div class="modal">
+      <button class="modal-close-btn" onclick="closeOverlay('ephemeralOverlay')" title="Close">✕</button>
+      <div class="auth-hero">
+        <div class="logo-box eph-box">
+          <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <h2>Disposable Room</h2>
+        <p>A random persona is assigned to you automatically. Room self-destructs when empty.</p>
+      </div>
+
+      <div class="tabs">
+        <button id="ephTabCreate" class="tab active" onclick="setEphTab('create')">Host Room</button>
+        <button id="ephTabJoin" class="tab" onclick="setEphTab('join')">Join via Code</button>
+      </div>
+
+      <div id="ephCreateFields">
+        <div class="field">
+          <label>ROOM ARCHITECTURE</label>
+          <select id="ephType" onchange="toggleEphLimitBox()">
+            <option value="dm">1-to-1 Private DM (Strict Max 2 Users)</option>
+            <option value="group">Custom Ephemeral Group</option>
+          </select>
+        </div>
+        <div class="field" id="ephLimitWrap" style="display:none">
+          <label>CAPACITY LIMIT (2 TO 50 USERS)</label>
+          <input type="number" id="ephLimit" min="2" max="50" value="5" />
+        </div>
+        <button class="btn-primary" onclick="createDisposableRoom()">Start Disposable Session</button>
+      </div>
+
+      <div id="ephJoinFields" style="display:none">
+        <div class="field"><label>ROOM CODE</label><input id="ephJoinCode" placeholder="e.g. tmp_9f2a4b1c" /></div>
+        <button class="btn-primary" onclick="joinDisposableRoom()">Enter Session</button>
+      </div>
+
+      <button class="btn-secondary" onclick="closeOverlay('ephemeralOverlay')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Single-Key Room Modal -->
+  <div id="roomOverlay" class="overlay">
+    <div class="modal">
+      <button class="modal-close-btn" onclick="closeOverlay('roomOverlay')" title="Close">✕</button>
+      <h2>Spaces &amp; Rooms</h2>
+      <p class="desc">Create a passkey space, join an existing space, or launch a disposable room.</p>
+      <div class="tabs">
+        <button id="roomTabCreate" class="tab active" onclick="setRoomTab('create')">Create Space</button>
+        <button id="roomTabJoin" class="tab" onclick="setRoomTab('join')">Join with Key</button>
+        <button id="roomTabEph" class="tab" onclick="setRoomTab('eph')">⚡ Disposable</button>
+      </div>
+      <div id="createFields">
+        <div class="field"><label>SPACE NAME</label><input id="cRoomName" placeholder="e.g. Core Engineering" /></div>
+        <div class="field"><label>SPACE PASSKEY (4+ CHARS)</label><input id="cRoomPass" type="password" placeholder="••••" onkeydown="if(event.key==='Enter')createRoom()" /></div>
+        <button class="btn-primary" onclick="createRoom()">Create Space</button>
+      </div>
+      <div id="joinFields" style="display:none">
+        <div class="field"><label>ROOM KEY</label><input id="jRoomKey" placeholder="e.g. hub_a1b2c3d4" /></div>
+        <div class="field"><label>SPACE PASSKEY</label><input id="jRoomPass" type="password" placeholder="••••" onkeydown="if(event.key==='Enter')joinRoomSubmit()" /></div>
+        <button class="btn-primary" onclick="joinRoomSubmit()">Join Space</button>
+      </div>
+      <div id="ephModalFields" style="display:none">
+        <p class="desc" style="margin-top:0">Instant zero-retention ephemeral session. Self-destructs when empty.</p>
+        <div class="field">
+          <label>SESSION TYPE</label>
+          <select id="modalEphType" onchange="document.getElementById('modalEphLimitWrap').style.display=this.value==='group'?'block':'none'">
+            <option value="dm">1-to-1 Private DM (Strict Max 2 Users)</option>
+            <option value="group">Custom Ephemeral Group</option>
+          </select>
+        </div>
+        <div class="field" id="modalEphLimitWrap" style="display:none">
+          <label>CAPACITY LIMIT (2 TO 50 USERS)</label>
+          <input type="number" id="modalEphLimit" min="2" max="50" value="5" />
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary" style="flex:1" onclick="createDisposableRoomFromModal()">Host Session</button>
+          <button class="btn-secondary" style="flex:1" onclick="closeOverlay('roomOverlay'); openOverlay('ephemeralOverlay')">Join via Code</button>
+        </div>
+      </div>
+      <button class="btn-secondary" onclick="closeOverlay('roomOverlay')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Room Info Modal -->
+  <div id="infoOverlay" class="overlay">
+    <div class="modal">
+      <button class="modal-close-btn" onclick="closeOverlay('infoOverlay')" title="Close">✕</button>
+      <h2 id="infoTitle">Channel Details</h2>
+      <p class="desc" id="infoDesc">Overview</p>
+      <div id="infoBody" style="font-size:.84rem;line-height:1.55;margin-bottom:14px"></div>
+      
+      <div id="adminRoomControls" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <div class="field">
+          <label>CHANGE PASSKEY (CREATOR ONLY)</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input id="oldPasskeyInput" type="password" placeholder="Current passkey" />
+            <input id="newPasskeyInput" type="password" placeholder="New passkey (4+ chars)" />
+            <button class="btn-mini" style="align-self:flex-start;padding:6px 12px" onclick="submitPasskeyChange()">Rotate Passkey</button>
+          </div>
+        </div>
+
+        <div id="bannedSection" style="margin:12px 0 14px">
+          <div class="field"><label>BANNED MEMBERS IN THIS SPACE</label></div>
+          <div id="bannedList" style="max-height:160px;overflow-y:auto"></div>
+        </div>
+
+        <button class="btn-danger" id="btnShowDestruct" onclick="promptDestruct()">⚠️ Disband &amp; Destroy Group</button>
+        <div id="confirmDestructBox" style="display:none;background:var(--danger-soft);border:1px solid var(--danger);padding:12px;border-radius:10px;margin-top:10px;text-align:center">
+          <p style="font-size:.8rem;color:#fca5a5">Permanently delete all messages and member access?</p>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn-danger" style="margin-top:0" onclick="executeDestruct()">Yes, Disband</button>
+            <button class="btn-secondary" style="margin-top:0" onclick="cancelDestruct()">Cancel</button>
+          </div>
+        </div>
+      </div>
+      
+      <button class="btn-secondary" onclick="closeOverlay('infoOverlay')">Close</button>
+    </div>
+  </div>
+
+  <!-- In-App Confirmation Modal -->
+  <div id="confirmOverlay" class="overlay">
+    <div class="modal" style="width:min(360px,100%);text-align:center">
+      <div style="font-size:1.8rem;margin-bottom:10px" id="confirmCardIcon">⚠️</div>
+      <h3 id="confirmCardTitle" style="font-size:1.05rem;margin-bottom:6px">Are you sure?</h3>
+      <p id="confirmCardText" style="font-size:.84rem;color:var(--muted);margin-bottom:18px"></p>
+      <div style="display:flex;gap:10px">
+        <button id="confirmCardOkBtn" class="btn-primary" style="flex:1">Confirm</button>
+        <button class="btn-secondary" style="flex:1;margin-top:0" onclick="closeOverlay('confirmOverlay')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ban Member Modal -->
+  <div id="banOverlay" class="overlay">
+    <div class="modal">
+      <button class="modal-close-btn" onclick="closeOverlay('banOverlay')" title="Close">✕</button>
+      <h2 style="color:var(--danger)">Ban Member</h2>
+      <p class="desc" id="banTargetLabel">Target: user</p>
+      <div class="field">
+        <label>DURATION TYPE</label>
+        <select id="banType" onchange="document.getElementById('banDurWrap').style.display=this.value==='temp'?'block':'none'">
+          <option value="temp" selected>Timed Ban</option>
+          <option value="perm">Permanent Ban</option>
+        </select>
+      </div>
+      <div class="field" id="banDurWrap">
+        <label>DURATION</label>
+        <select id="banDur">
+          <option value="1h">1 hour</option>
+          <option value="4h">4 hours</option>
+          <option value="24h" selected>24 hours</option>
+          <option value="7d">7 days</option>
+        </select>
+      </div>
+      <button class="btn-danger" onclick="submitBan()">Confirm Ban</button>
+      <button class="btn-secondary" onclick="closeOverlay('banOverlay')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Member Profile Modal -->
+  <div id="profileOverlay" class="overlay">
+    <div class="modal">
+      <button class="modal-close-btn" onclick="closeOverlay('profileOverlay')" title="Close">✕</button>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div id="profAvatar" class="av" style="width:48px;height:48px;font-size:1.2rem">?</div>
+        <div style="flex:1;min-width:0">
+          <h3 id="profName" style="font-size:1rem;font-weight:700;word-break:break-all">User</h3>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">
+            <span id="profStatus" style="font-size:.72rem;font-family:var(--mono);display:inline-flex;align-items:center;gap:4px">● Offline</span>
+            <span id="profCustomStatusBadge" class="prof-status-chip" style="display:none"></span>
+          </div>
+        </div>
+      </div>
+      <div id="profMetaRow" style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:.72rem;color:var(--muted);font-family:var(--mono)">
+        <span id="profMemberSince">🗓️ Member</span>
+      </div>
+      <p id="profBio" style="font-size:.82rem;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);padding:10px;border-radius:8px;margin-bottom:14px;display:none;line-height:1.45"></p>
+
+      <div id="profCallActions" style="display:none;gap:8px;margin-bottom:8px">
+        <button class="btn-primary" style="flex:1" onclick="callFromProfile('audio')">📞 Voice Call</button>
+        <button class="btn-primary" style="flex:1" onclick="callFromProfile('video')">📹 Video Call</button>
+      </div>
+      <button id="profDmBtn" class="btn-primary" onclick="requestChat()">Request Chat Permission</button>
+      <button class="btn-secondary" onclick="closeOverlay('profileOverlay')">Close</button>
+
+    </div>
+  </div>
+
+  <!-- Settings & Preferences Center Modal -->
+  <div id="myAccountOverlay" class="overlay">
+    <div class="modal" style="width:min(550px, 100%)">
+      <button class="modal-close-btn" onclick="closeOverlay('myAccountOverlay')" title="Close">✕</button>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+        <div id="myAcctAvatar" class="av" style="width:50px;height:50px;font-size:1.25rem">?</div>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <h3 id="myAcctUsername" style="font-size:1.05rem;font-weight:700">username</h3>
+            <span style="font-size:0.65rem;background:var(--accent-soft);color:var(--accent);font-weight:700;padding:2px 7px;border-radius:6px;font-family:var(--mono)">SETTINGS</span>
+          </div>
+          <span style="font-size:.74rem;color:var(--muted);font-family:var(--mono)">Personal preferences &amp; workspace controls</span>
+        </div>
+      </div>
+
+      <div class="tabs" style="overflow-x:auto;scrollbar-width:none">
+        <button id="acctTabProfile" class="tab active" onclick="setAccountTab('profile')">Profile</button>
+        <button id="acctTabPassword" class="tab" onclick="setAccountTab('password')">Security</button>
+        <button id="acctTabAppearance" class="tab" onclick="setAccountTab('appearance')">Appearance</button>
+        <button id="acctTabNotify" class="tab" onclick="setAccountTab('notify')">Alerts</button>
+        <button id="acctTabAbout" class="tab" onclick="setAccountTab('about')">Privacy</button>
+      </div>
+
+      <!-- Tab 1: Profile details -->
+      <div id="acctProfilePane">
+        <!-- Section: Avatar Accent Palette -->
+        <div class="field" style="margin-bottom:12px">
+          <label>AVATAR ACCENT &amp; PALETTE</label>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+            <div id="myAcctAvatarPreview" class="av" style="width:42px;height:42px;font-size:1.05rem;flex-shrink:0">?</div>
+            <div style="flex:1">
+              <div class="avatar-swatches-grid" id="avatarSwatchesGrid"></div>
+              <input type="hidden" id="acctAvatarColor" value="" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Custom Status & Activity -->
+        <div class="field" style="margin-bottom:12px">
+          <label>STATUS &amp; ACTIVITY MOOD</label>
+          <div class="status-preset-row">
+            <button type="button" class="status-preset-pill" onclick="applyStatusPreset('💻', 'Working')">💻 Working</button>
+            <button type="button" class="status-preset-pill" onclick="applyStatusPreset('🎧', 'Listening')">🎧 Listening</button>
+            <button type="button" class="status-preset-pill" onclick="applyStatusPreset('🚀', 'In Flow')">🚀 In Flow</button>
+            <button type="button" class="status-preset-pill" onclick="applyStatusPreset('☕', 'Coffee Break')">☕ Break</button>
+            <button type="button" class="status-preset-pill" onclick="applyStatusPreset('🌴', 'AFK')">🌴 AFK</button>
+            <button type="button" class="status-preset-pill" onclick="applyStatusPreset('🌙', 'Do Not Disturb')">🌙 Busy</button>
+            <button type="button" class="status-preset-pill" onclick="applyStatusPreset('💬', 'Ready to Chat')">💬 Chatting</button>
+            <button type="button" class="status-preset-pill" onclick="clearStatusPreset()">✕ Clear</button>
+          </div>
+          <div class="status-input-row">
+            <input id="acctStatusEmoji" class="status-emoji-input" placeholder="💬" maxlength="4" oninput="updateStatusPreview()" />
+            <input id="acctCustomStatus" placeholder="What's your current focus?" maxlength="100" oninput="updateStatusPreview()" />
+          </div>
+          <div id="acctStatusPreviewWrap" style="display:none;margin-top:4px">
+            <span class="status-preview-chip" id="acctStatusPreviewChip"></span>
+          </div>
+        </div>
+
+        <!-- Section: Display Name & Bio -->
+        <div class="field">
+          <label>DISPLAY NAME (OPTIONAL)</label>
+          <input id="acctDisplayName" placeholder="How others might see you" maxlength="50" />
+          <label class="visibility-row">
+            <input type="checkbox" id="acctShowDisplayName" />
+            <span>Show this to other users</span>
+          </label>
+        </div>
+        <div class="field">
+          <label>BIO (OPTIONAL)</label>
+          <input id="acctBio" placeholder="A short line about you" maxlength="160" />
+          <label class="visibility-row">
+            <input type="checkbox" id="acctShowBio" />
+            <span>Show this to other users</span>
+          </label>
+        </div>
+
+        <!-- Section: Account Statistics & Metadata Cards -->
+        <div class="field" style="margin-top:14px;margin-bottom:6px">
+          <label>ACCOUNT METRICS &amp; VERIFICATION</label>
+        </div>
+        <div class="acct-stats-grid">
+          <div class="acct-stat-card">
+            <div class="acct-stat-icon-val">
+              <span class="acct-stat-icon">🗓️</span>
+              <span class="acct-stat-val" id="acctStatMemberSince">Loading…</span>
+            </div>
+            <span class="acct-stat-lbl">MEMBER SINCE</span>
+          </div>
+          <div class="acct-stat-card">
+            <div class="acct-stat-icon-val">
+              <span class="acct-stat-icon">💬</span>
+              <span class="acct-stat-val" id="acctStatMessages">0 sent</span>
+            </div>
+            <span class="acct-stat-lbl">TOTAL MESSAGES</span>
+          </div>
+          <div class="acct-stat-card">
+            <div class="acct-stat-icon-val">
+              <span class="acct-stat-icon">🛡️</span>
+              <span class="acct-stat-val" id="acctStatRooms">0 active</span>
+            </div>
+            <span class="acct-stat-lbl">SPACES JOINED</span>
+          </div>
+          <div class="acct-stat-card">
+            <div class="acct-stat-icon-val">
+              <span class="acct-stat-icon">🔐</span>
+              <span class="acct-stat-val" id="acctStatCrypto">ECDH P-256</span>
+            </div>
+            <span class="acct-stat-lbl">E2EE IDENTITY</span>
+          </div>
+        </div>
+
+        <button class="btn-primary" onclick="saveAccountProfile()">Save Profile Changes</button>
+      </div>
+
+      <!-- Tab 2: Security & Cryptography Dashboard -->
+      <div id="acctPasswordPane" style="display:none">
+        
+        <!-- Section 1: E2EE Cryptographic Identity -->
+        <div class="sec-card">
+          <div class="sec-card-header">
+            <div class="sec-card-title">
+              <svg viewBox="0 0 24 24" class="sec-icon"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>End-to-End Cryptographic Identity</span>
+            </div>
+            <span class="sec-status-badge active" id="e2eeStatusBadge">🔒 ECDH P-256 Active</span>
+          </div>
+          <p class="sec-desc">Zero-knowledge client keys stored strictly in your browser. Messages are encrypted before leaving your device.</p>
+
+          <div class="field" style="margin-bottom:8px">
+            <label>YOUR PUBLIC SAFETY NUMBER / FINGERPRINT</label>
+            <div class="fingerprint-box" id="myFingerprintBox">
+              <span id="myFingerprintText" class="fingerprint-text">Loading cryptographic fingerprint…</span>
+              <button class="fingerprint-copy-btn" onclick="copyMyFingerprint()" title="Copy Safety Number">📋 Copy</button>
+            </div>
+          </div>
+
+          <div class="sec-action-row">
+            <button class="btn-secondary btn-mini" onclick="viewPublicJwk()" title="Inspect Raw ECDH Public Key">
+              👁️ View Public Key (JWK)
+            </button>
+            <button class="btn-secondary btn-mini" onclick="promptRotateKeys()" title="Generate new keypair and re-publish public key">
+              🔄 Rotate Identity Keys
+            </button>
+          </div>
+
+          <!-- Raw JWK viewer collapsible -->
+          <div id="jwkViewerBox" style="display:none;margin-top:10px" class="jwk-box">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:.68rem;font-family:var(--mono);color:var(--muted)">RAW PUBLIC KEY (JWK FORMAT)</span>
+              <button class="btn-mini" style="font-size:.65rem;padding:2px 6px" onclick="document.getElementById('jwkViewerBox').style.display='none'">Hide</button>
+            </div>
+            <pre id="jwkCodeArea" class="jwk-pre"></pre>
+          </div>
+        </div>
+
+        <!-- Section 2: Active Sessions & Device Management -->
+        <div class="sec-card" style="margin-top:14px">
+          <div class="sec-card-header">
+            <div class="sec-card-title">
+              <svg viewBox="0 0 24 24" class="sec-icon"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              <span>Active Sessions &amp; Devices</span>
+            </div>
+            <span class="sec-badge-count" id="secSessionCount">1 Active</span>
+          </div>
+          <p class="sec-desc">Active authenticated sessions registered to your account identity.</p>
+
+          <div id="activeSessionsList" class="sessions-list">
+            <div class="session-row current">
+              <div class="session-info">
+                <div class="session-device">🟢 Current Web Session (Active Now)</div>
+                <div class="session-meta">Authenticating…</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn-danger-outline btn-mini" style="margin-top:10px;width:100%" onclick="revokeOtherSessions()" id="btnRevokeSessions">
+            ⚠️ Sign Out All Other Devices &amp; Sessions
+          </button>
+        </div>
+
+        <!-- Section 3: Password Authentication -->
+        <div class="sec-card" style="margin-top:14px">
+          <div class="sec-card-header">
+            <div class="sec-card-title">
+              <svg viewBox="0 0 24 24" class="sec-icon"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+              <span>Password Authentication</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>CURRENT PASSWORD</label>
+            <div class="pw-field">
+              <input id="acctCurrentPass" type="password" autocomplete="current-password" placeholder="••••••••" />
+              <button type="button" class="pw-eye-btn" onclick="togglePasswordVisibility('acctCurrentPass', this)" title="Show password">
+                <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          
+          <div class="field">
+            <label>NEW PASSWORD</label>
+            <div class="pw-field">
+              <input id="acctNewPass" type="password" autocomplete="new-password" placeholder="6+ characters" oninput="onNewPasswordInput(this.value)" />
+              <button type="button" class="pw-eye-btn" onclick="togglePasswordVisibility('acctNewPass', this)" title="Show password">
+                <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            
+            <!-- Dynamic Strength Bar -->
+            <div class="pw-strength-wrap" id="pwStrengthWrap" style="display:none">
+              <div class="pw-strength-bar">
+                <div class="pw-strength-fill" id="pwStrengthFill"></div>
+              </div>
+              <span class="pw-strength-label" id="pwStrengthLabel">Weak</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>CONFIRM NEW PASSWORD</label>
+            <div class="pw-field">
+              <input id="acctConfirmPass" type="password" autocomplete="new-password" placeholder="Repeat new password" oninput="onConfirmPasswordInput(this.value)" onkeydown="if(event.key==='Enter')saveAccountPassword()" />
+              <button type="button" class="pw-eye-btn" onclick="togglePasswordVisibility('acctConfirmPass', this)" title="Show password">
+                <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div class="pw-match-label" id="pwMatchLabel" style="display:none"></div>
+          </div>
+
+          <button class="btn-primary" onclick="saveAccountPassword()">Update Password</button>
+        </div>
+
+        <!-- Section 4: Cryptographic Protocol Specs -->
+        <div class="sec-card" style="margin-top:14px;background:var(--surface-2)">
+          <div class="sec-card-header">
+            <div class="sec-card-title">
+              <svg viewBox="0 0 24 24" class="sec-icon"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              <span>ChatHub Cryptographic Protocol Stack</span>
+            </div>
+          </div>
+          <div class="crypto-specs-grid">
+            <div class="crypto-spec-item">
+              <div class="spec-name">Direct Messages (DMs)</div>
+              <div class="spec-algo">ECDH (P-256) + HKDF + AES-256-GCM</div>
+            </div>
+            <div class="crypto-spec-item">
+              <div class="spec-name">Private Spaces</div>
+              <div class="spec-algo">PBKDF2-HMAC-SHA256 (100k) + AES-GCM</div>
+            </div>
+            <div class="crypto-spec-item">
+              <div class="spec-name">User Passwords</div>
+              <div class="spec-algo">Salted PBKDF2-HMAC-SHA256 (100,000 iter)</div>
+            </div>
+            <div class="crypto-spec-item">
+              <div class="spec-name">Voice &amp; Video Streams</div>
+              <div class="spec-algo">WebRTC P2P DTLS 1.2 + SRTP AES-128</div>
+            </div>
+            <div class="crypto-spec-item">
+              <div class="spec-name">Ephemeral Sessions</div>
+              <div class="spec-algo">Zero-Retention RAM WebSockets (No DB)</div>
+            </div>
+            <div class="crypto-spec-item">
+              <div class="spec-name">Transport Security</div>
+              <div class="spec-algo">TLS 1.3 / WSS End-to-End Tunneling</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab 3: Appearance & Themes -->
+      <div id="acctAppearancePane" style="display:none">
+        <div class="field" style="margin-bottom:6px">
+          <label>COLOR THEME PRESET</label>
+        </div>
+        <div class="theme-gallery-grid" id="themeGalleryGrid"></div>
+
+        <div class="field" style="margin-top:16px;margin-bottom:6px">
+          <label>PRIMARY ACCENT COLOR</label>
+        </div>
+        <div class="accent-palette-row" id="accentPaletteRow"></div>
+
+        <div class="field" style="margin-top:16px;margin-bottom:6px">
+          <label>CHAT DENSITY</label>
+        </div>
+        <div class="density-segmented-control">
+          <button class="density-btn active" id="densityBtn_cozy" onclick="applyDensity('cozy')">
+            <span>🛋️ Cozy (Comfortable)</span>
+          </button>
+          <button class="density-btn" id="densityBtn_compact" onclick="applyDensity('compact')">
+            <span>📋 Compact (Dense)</span>
+          </button>
+        </div>
+
+        <div class="theme-footer-note">
+          Theme and style preferences are automatically saved and applied in real time across your workspace.
+        </div>
+      </div>
+
+      <!-- Tab 4: Sound & Notifications -->
+      <div id="acctNotifyPane" style="display:none">
+        <div class="field"><label>AUDIO &amp; PUSH PREFERENCES</label></div>
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:.84rem;font-weight:600">Sound Notifications</div>
+              <div style="font-size:.72rem;color:var(--muted)">Chime when tagged or receiving DMs</div>
+            </div>
+            <button class="btn-mini" onclick="playNotifySound(true)" title="Play test tone">🔔 Test Sound</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding-top:10px">
+            <div>
+              <div style="font-size:.84rem;font-weight:600">Desktop Notifications</div>
+              <div style="font-size:.72rem;color:var(--muted)">Show system notification popups</div>
+            </div>
+            <button class="btn-mini" onclick="Notification.requestPermission().then(p=>showToast('Permission: '+p,'🔔'))">Enable</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 5: Data & Privacy Policies -->
+      <div id="acctAboutPane" style="display:none">
+        <!-- Section 1: Online Presence Privacy -->
+        <div class="privacy-card">
+          <div class="field" style="margin-bottom:0">
+            <label style="display:flex;align-items:center;justify-content:space-between">
+              <span>ONLINE PRESENCE PRIVACY</span>
+              <span style="font-size:.65rem;color:var(--accent);font-family:var(--mono)">GHOST MODE</span>
+            </label>
+            <label class="visibility-row" style="margin-top:4px">
+              <input type="checkbox" id="acctHidePresence" onchange="toggleInvisibleMode(this.checked)" />
+              <span>Invisible Mode (Hide presence across directory &amp; member lists)</span>
+            </label>
+            <p style="font-size:.72rem;color:var(--muted);margin-top:4px;line-height:1.4">When enabled, you appear offline to all peers while retaining full access to read messages, send chat, and initiate calls.</p>
+          </div>
+        </div>
+
+        <!-- Section 2: Account Data Portability & Archive -->
+        <div class="export-data-card">
+          <div class="export-header">
+            <svg viewBox="0 0 24 24" class="sec-icon" style="width:16px;height:16px;stroke:var(--accent);fill:none;stroke-width:2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Account Data Portability (JSON Archive)</span>
+          </div>
+          <p style="font-size:.74rem;color:var(--muted);line-height:1.45;margin-bottom:10px">
+            Download a portable, machine-readable JSON backup of your account profile, space memberships, cryptographic key fingerprints, and sent message records.
+          </p>
+          <button class="btn-secondary btn-mini" style="width:100%;padding:8px" onclick="exportMyAccountData()" id="btnExportData">
+            📥 Export My Account Data (.json)
+          </button>
+        </div>
+
+        <!-- Section 3: Data Retention & Security Policies -->
+        <div class="field"><label>DATA RETENTION &amp; SECURITY POLICIES</label></div>
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;font-size:.82rem;line-height:1.55">
+          <div style="margin-bottom:10px">
+            <b style="color:var(--text)">🕒 Public Group Auto-Purge:</b>
+            <div style="color:var(--muted);font-size:.74rem">Messages in Public Group auto-purge from the database 48 hours after delivery.</div>
+          </div>
+          <div style="margin-bottom:10px">
+            <b style="color:#fcd34d">⚡ Disposable Ephemeral Rooms:</b>
+            <div style="color:var(--muted);font-size:.74rem">Zero retention. When all participants leave, all messages and media are wiped instantly.</div>
+          </div>
+          <div>
+            <b style="color:var(--text)">🔒 Passkey Spaces:</b>
+            <div style="color:var(--muted);font-size:.74rem">Passkeys are salted and hashed (PBKDF2-HMAC-SHA256). Spaces can be permanently destroyed by their creators at any time.</div>
+          </div>
+        </div>
+
+        <button class="btn-secondary btn-mini" style="width:100%;margin-bottom:14px" onclick="clearActivityFeed()">Clear Local Notification History</button>
+
+        <!-- Section 4: Danger Zone -->
+        <div class="danger-zone-card">
+          <div class="danger-header">
+            <svg viewBox="0 0 24 24" class="sec-icon" style="width:16px;height:16px;stroke:var(--danger);fill:none;stroke-width:2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>DANGER ZONE: DELETE ACCOUNT &amp; WIPE IDENTITY</span>
+          </div>
+          <p class="danger-desc">
+            Permanently delete your user registration, invalidate all active device sessions, and remove your memberships. This operation is irreversible.
+          </p>
+          <button class="btn-danger-outline btn-mini" style="width:100%;padding:8px" onclick="promptDeleteAccount()">
+            ⚠️ Permanently Delete My Account…
+          </button>
+        </div>
+      </div>
+
+      <button class="btn-secondary" style="margin-top:12px" onclick="closeOverlay('myAccountOverlay')">Close Settings</button>
+    </div>
+  </div>
+
+  <!-- Delete Account Confirmation Modal -->
+  <div id="deleteAccountOverlay" class="overlay">
+    <div class="modal" style="width:min(420px,100%)">
+      <button class="modal-close-btn" onclick="closeOverlay('deleteAccountOverlay')" title="Close">✕</button>
+      <div style="font-size:1.8rem;text-align:center;margin-bottom:6px">⚠️</div>
+      <h3 style="font-size:1.05rem;text-align:center;color:var(--danger);margin-bottom:6px">Permanently Delete Account</h3>
+      <p class="desc" style="text-align:center;margin-bottom:14px">
+        This will permanently purge your user profile, active sessions, and room memberships. This action cannot be reversed.
+      </p>
+      <div class="field">
+        <label>CONFIRM YOUR PASSWORD TO PROCEED</label>
+        <div class="pw-field">
+          <input id="deleteAccountPass" type="password" placeholder="Enter account password" onkeydown="if(event.key==='Enter')executeDeleteAccount()" />
+          <button type="button" class="pw-eye-btn" onclick="togglePasswordVisibility('deleteAccountPass', this)" title="Show password">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn-danger" style="flex:1" onclick="executeDeleteAccount()">Permanently Delete</button>
+        <button class="btn-secondary" style="flex:1;margin-top:0" onclick="closeOverlay('deleteAccountOverlay')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unified Command Switcher & Direct Message Modal -->
+  <div id="searchOverlay" class="overlay">
+    <div class="modal command-palette-modal">
+      <div class="palette-header">
+        <div class="palette-search-box">
+          <svg viewBox="0 0 24 24" class="palette-search-icon">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input 
+            id="userSearchInput" 
+            class="palette-input" 
+            placeholder="Search users or spaces… (↑↓ to select, ↵ to chat)" 
+            autocomplete="off" 
+            oninput="runUserSearch()" 
+            onkeydown="onPaletteKeyDown(event)" 
+          />
+          <button id="paletteClearBtn" class="palette-clear-btn" style="display:none" onclick="clearPaletteSearch()" title="Clear search">✕</button>
+        </div>
+        <button class="palette-close-icon-btn" onclick="closeOverlay('searchOverlay')" title="Close (Esc)">✕</button>
+      </div>
+
+      <!-- Quick Category Filters -->
+      <div class="palette-tabs">
+        <button class="palette-tab active" id="palTabAll" onclick="setPaletteTab('all')">All</button>
+        <button class="palette-tab" id="palTabPeople" onclick="setPaletteTab('people')">Direct Messages</button>
+        <button class="palette-tab" id="palTabSpaces" onclick="setPaletteTab('spaces')">Spaces</button>
+        <button class="palette-tab" id="palTabOnline" onclick="setPaletteTab('online')">● Online Now</button>
+      </div>
+
+      <!-- Live Search Results & Suggestions -->
+      <div id="userSearchResults" class="palette-results-list"></div>
+
+      <!-- Footer keyboard shortcut hints -->
+      <div class="palette-footer">
+        <div class="palette-footer-hints">
+          <span class="palette-hint"><kbd>↑</kbd> <kbd>↓</kbd> Navigate</span>
+          <span class="palette-hint"><kbd>↵</kbd> Select</span>
+          <span class="palette-hint"><kbd>esc</kbd> Dismiss</span>
+        </div>
+        <div class="palette-footer-count" id="paletteResultCount">ChatHub Switcher</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLACK / DISCORD MULTI-COLUMN WORKSPACE -->
+  <div class="app-workspace">
+    <!-- 1. LEFT ACTIVITY RAIL -->
+    <nav class="activity-rail" aria-label="Activity Rail">
+      <div class="rail-top">
+        <div class="rail-brand" id="brandBtn" onclick="onBrandClick()" title="ChatHub Home">
+          <div class="rail-brand-icon">
+            <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          </div>
+        </div>
+
+        <div class="rail-divider"></div>
+
+        <button class="rail-item active" id="railBtn_home" onclick="setView('home')" title="Home / Command Center">
+          <span class="rail-pill"></span>
+          <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </button>
+
+        <button class="rail-item" id="railBtn_chat" onclick="setView('chat')" title="Channels &amp; Chats">
+          <span class="rail-pill"></span>
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+
+        <div class="rail-notify-wrap" id="requestsWrap">
+          <button class="rail-item" id="railBtn_notify" onclick="showNotifications()" title="Notifications &amp; Activity">
+            <span class="rail-pill"></span>
+            <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </button>
+          <span id="reqBadge" class="badge-dot" style="display:none">0</span>
+        </div>
+
+        <button class="rail-item rail-eph" id="railBtn_eph" onclick="openOverlay('ephemeralOverlay')" title="⚡ Quick Disposable Room">
+          <span class="rail-pill"></span>
+          <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </button>
+
+        <button class="rail-item" id="searchBtn" onclick="openPeopleSearch()" title="Find People">
+          <span class="rail-pill"></span>
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+      </div>
+
+      <div class="rail-bottom">
+        <button class="rail-item" id="railBtn_settings" onclick="openMyAccount()" title="Settings &amp; Preferences">
+          <span class="rail-pill"></span>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+
+        <button class="rail-item theme-switch-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+          <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+
+        <button class="rail-item rail-logout" onclick="logout()" title="Sign Out">
+          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- 2. CHANNELS & DMS SIDEBAR -->
+    <aside class="side-left" id="leftPanel">
+      <div class="sidebar-header">
+        <div class="sidebar-title-group">
+          <div class="sidebar-title">ChatHub</div>
+          <span class="sidebar-status-tag">Connected</span>
+        </div>
+        <button class="sidebar-add-btn" onclick="openRoomModal('create')" title="New Space or Session">+</button>
+      </div>
+
+      <div class="sidebar-filter-box">
+        <div class="sidebar-search-input-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="sidebarSearchInput" placeholder="Filter spaces &amp; DMs… (Ctrl+K)" autocomplete="off" oninput="onSidebarSearchInput(this.value)" />
+          <button id="sidebarSearchClear" class="search-clear-btn" style="display:none" onclick="clearSidebarSearch()" title="Clear filter">✕</button>
+        </div>
+        <div class="sidebar-filter-pills">
+          <div class="pill-group">
+            <button class="filter-pill active" id="filterPill_all" onclick="setRoomFilter('all')">All</button>
+            <button class="filter-pill" id="filterPill_unread" onclick="setRoomFilter('unread')">
+              Unread <span class="pill-badge" id="unreadFilterBadge" style="display:none">0</span>
+            </button>
+            <button class="filter-pill" id="filterPill_channels" onclick="setRoomFilter('channels')">Channels</button>
+            <button class="filter-pill" id="filterPill_dms" onclick="setRoomFilter('dms')">DMs</button>
+          </div>
+          <div class="sort-control">
+            <button class="sort-toggle-btn" id="sortToggleBtn" onclick="toggleSortDropdown(event)" title="Sort order">
+              <span id="sortOrderLabel">Activity ▾</span>
+            </button>
+            <div class="sort-dropdown-menu" id="sortDropdownMenu" style="display:none">
+              <button class="sort-opt active" id="sortOpt_recent" onclick="setRoomSort('recent')">⏱ Recent</button>
+              <button class="sort-opt" id="sortOpt_alpha" onclick="setRoomSort('alpha')">🔤 Name (A-Z)</button>
+              <button class="sort-opt" id="sortOpt_unread" onclick="setRoomSort('unread')">🔴 Most Unread</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-scrollable">
+        <div id="sidebarEmptyFilter" style="display:none" class="sidebar-empty-filter">
+          <div style="font-size:1.3rem;margin-bottom:4px">🔍</div>
+          <div style="font-size:0.82rem;font-weight:600;color:var(--text)">No matches found</div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">Try a different search or filter</div>
+          <button class="btn-mini" style="margin-top:8px" onclick="clearSidebarSearch()">Reset filter</button>
+        </div>
+
+        <div class="sidebar-section" id="sectionChannels">
+          <div class="nav-label-row">
+            <span class="nav-label" id="channelsLabel">CHANNELS</span>
+            <button class="nav-add-btn" onclick="openRoomModal('create')" title="Create or Join Space">+</button>
+          </div>
+          <button class="nav-row" id="navPublic" onclick="openRoom('public','Public Group',false)">
+            <span class="prefix">#</span>
+            <span class="label">Public Group</span>
+          </button>
+          <div id="ephRoomSlot"></div>
+          <div id="roomsList"></div>
+        </div>
+
+        <div class="sidebar-section" id="sectionDms" style="margin-top:16px">
+          <div class="nav-label-row">
+            <span class="nav-label" id="dmLabel">DIRECT MESSAGES</span>
+            <button class="nav-add-btn" onclick="openPeopleSearch()" title="Start New Direct Message">+</button>
+          </div>
+          <div id="dmsList"></div>
+        </div>
+      </div>
+
+      <div class="account-summary" id="accountSummaryBtn" onclick="openMyAccount()" title="Profile &amp; Settings">
+        <div id="sideAvatar" class="av pres-green" style="width:36px;height:36px;font-size:.85rem">?</div>
+        <div class="acct-info">
+          <div class="acct-user" id="sideUser">—</div>
+          <div class="acct-status" id="sideStatus">profile &amp; settings</div>
+        </div>
+        <span class="acct-gear" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
+      </div>
+    </aside>
+
+    <div id="backdrop" class="backdrop" onclick="closePanels()"></div>
+
+    <!-- 3. MAIN WORKSPACE CONTENT -->
+    <main class="stage">
+      <!-- Focus Command Center View (Home) -->
+      <div id="homeView" style="display:none">
+        <div class="home-container">
+          <!-- Top Row: Welcome & Dynamic Greeting + Back to Chat Button -->
+          <div class="home-header">
+            <div class="home-header-left">
+              <div class="home-badge-pill">
+                <span class="home-badge-dot"></span>
+                <span>WORKSPACE COMMAND CENTER</span>
+              </div>
+              <h1 class="home-greeting" id="homeGreeting">Welcome back 👋</h1>
+              <p class="home-sub" id="homeSub">ChatHub Focus Station · Connected and end-to-end encrypted</p>
+            </div>
+            <div class="home-header-actions">
+              <button class="btn-secondary btn-mini home-back-chat-btn" onclick="setView('chat')" title="Return to active conversation">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Open Active Chat</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 1: Hero Omnibar / Command Bar (Ctrl + K) -->
+          <div class="home-hero-launcher">
+            <div class="home-search-trigger" onclick="openPeopleSearch()" title="Open Quick Jump Search (Ctrl+K)">
+              <div class="home-search-left">
+                <svg viewBox="0 0 24 24" class="home-search-glyph"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span class="home-search-text">Search conversations, people, or commands…</span>
+              </div>
+              <div class="home-search-kbd">
+                <kbd>Ctrl</kbd> + <kbd>K</kbd>
+              </div>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="home-quick-actions">
+              <button class="home-action-btn" onclick="openPeopleSearch()">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="12" y1="8" x2="12" y2="14"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+                <span>New Direct Message</span>
+              </button>
+              <button class="home-action-btn" onclick="openRoomModal('create')">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Create Space</span>
+              </button>
+              <button class="home-action-btn" onclick="openRoomModal('join')">
+                <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                <span>Join with Passkey</span>
+              </button>
+              <button class="home-action-btn" onclick="openOverlay('ephemeralOverlay')">
+                <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Disposable Room</span>
+              </button>
+              <button class="home-action-btn" onclick="setView('notify'); renderNotifications();">
+                <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                <span>Activity &amp; Inbox</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 2: Jump Back In (Recent & Pinned Conversations) -->
+          <div class="home-section">
+            <div class="home-section-header">
+              <div class="home-section-title-group">
+                <h2 class="home-section-title">Jump Back In</h2>
+                <span class="home-section-sub">Your recent spaces &amp; active direct messages</span>
+              </div>
+            </div>
+            <div id="homeRecentList" class="home-recent-grid"></div>
+          </div>
+
+          <!-- Section 3: Dual Grid (Security Overview + Daily Focus Status) -->
+          <div class="home-dual-grid">
+            <!-- Left Card: E2EE Security & Health -->
+            <div class="home-card home-security-card">
+              <div class="home-card-header">
+                <div class="home-card-title-row">
+                  <div class="home-sec-icon-wrap">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </div>
+                  <div>
+                    <div class="home-card-title">Cryptographic Protocol Health</div>
+                    <div class="home-card-sub">Zero-knowledge client-side encryption</div>
+                  </div>
+                </div>
+                <span class="home-status-chip active">
+                  <span class="pulse-dot"></span> Active
+                </span>
+              </div>
+              <div class="home-sec-specs">
+                <div class="home-spec-row">
+                  <span class="spec-label">Direct Streams:</span>
+                  <span class="spec-val">ECDH (P-256) + HKDF + AES-256-GCM</span>
+                </div>
+                <div class="home-spec-row">
+                  <span class="spec-label">Spaces &amp; Rooms:</span>
+                  <span class="spec-val">PBKDF2 (100k) + AES-GCM Authenticated</span>
+                </div>
+                <div class="home-spec-row">
+                  <span class="spec-label">WebRTC Streams:</span>
+                  <span class="spec-val">P2P DTLS 1.2 / SRTP Encrypted</span>
+                </div>
+                <div class="home-spec-row">
+                  <span class="spec-label">Device Key Fingerprint:</span>
+                  <span class="spec-val mono" id="homeFingerprintTag">Generating key…</span>
+                </div>
+              </div>
+              <div class="home-sec-footer">
+                <button class="btn-mini btn-secondary" onclick="openMyAccount(); setAccountTab('password');" style="margin:0;font-size:0.75rem;padding:6px 12px">
+                  🛡️ Security &amp; Sessions Dashboard
+                </button>
+              </div>
+            </div>
+
+            <!-- Right Card: Quick Focus & Status Selector -->
+            <div class="home-card home-focus-card">
+              <div class="home-card-header">
+                <div class="home-card-title-row">
+                  <div class="home-focus-icon-wrap">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div>
+                    <div class="home-card-title">My Focus &amp; Presence</div>
+                    <div class="home-card-sub">Quickly broadcast your current availability</div>
+                  </div>
+                </div>
+              </div>
+              <div class="home-current-status-display" id="homeCurrentStatusDisplay">
+                <div class="home-status-preview-avatar" id="homeStatusAvatar">?</div>
+                <div class="home-status-preview-meta">
+                  <div class="home-status-preview-name" id="homeStatusName">—</div>
+                  <div class="home-status-preview-text" id="homeStatusText">Available · Online</div>
+                </div>
+              </div>
+              <div class="home-status-quick-pills">
+                <button class="status-pill-btn" onclick="setQuickStatus('Online', '🟢')">🟢 Available</button>
+                <button class="status-pill-btn" onclick="setQuickStatus('In a meeting', '💬')">💬 In a Meeting</button>
+                <button class="status-pill-btn" onclick="setQuickStatus('Deep Focus', '🎯')">🎯 Deep Focus</button>
+                <button class="status-pill-btn" onclick="setQuickStatus('Stepped away', '☕')">☕ Taking a Break</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 4: Keyboard Shortcuts Matrix -->
+          <div class="home-section">
+            <div class="home-section-header">
+              <div class="home-section-title-group">
+                <h2 class="home-section-title">Productivity &amp; Keyboard Shortcuts</h2>
+                <span class="home-section-sub">Navigate ChatHub seamlessly without touching your mouse</span>
+              </div>
+            </div>
+            <div class="home-shortcuts-matrix">
+              <div class="shortcut-cell">
+                <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>K</kbd></div>
+                <div class="shortcut-desc">Open quick jump &amp; user search</div>
+              </div>
+              <div class="shortcut-cell">
+                <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>F</kbd></div>
+                <div class="shortcut-desc">Search messages inside current channel</div>
+              </div>
+              <div class="shortcut-cell">
+                <div class="shortcut-keys"><kbd>Alt</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd></div>
+                <div class="shortcut-desc">Cycle through channels and DMs</div>
+              </div>
+              <div class="shortcut-cell">
+                <div class="shortcut-keys"><kbd>Esc</kbd></div>
+                <div class="shortcut-desc">Close open modal, drawer, or search</div>
+              </div>
+              <div class="shortcut-cell">
+                <div class="shortcut-keys"><kbd>Enter</kbd></div>
+                <div class="shortcut-desc">Send message (<kbd>Shift</kbd>+<kbd>Enter</kbd> for newline)</div>
+              </div>
+              <div class="shortcut-cell">
+                <div class="shortcut-keys"><kbd>Alt</kbd> + <kbd>H</kbd></div>
+                <div class="shortcut-desc">Return to Command Center</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification Center View -->
+      <div id="notifyView" style="display:none">
+        <div class="notify-container">
+          <div class="notify-header">
+            <div class="notify-header-info">
+              <div class="notify-badge-pill">
+                <span class="notify-badge-dot"></span>
+                <span>ACTIVITY &amp; INBOX</span>
+              </div>
+              <h1 class="notify-title">Notification Center</h1>
+              <p class="notify-sub">Direct chat requests, user mentions, and workspace activities.</p>
+            </div>
+            <div class="notify-header-actions">
+              <button class="btn-secondary btn-mini" onclick="setView('chat')" style="padding:6px 12px;font-size:0.75rem" title="Return to active conversation">
+                ← Back to Chat
+              </button>
+              <button class="notify-action-btn" onclick="clearActivityFeed()" title="Clear activity history">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>Clear History</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="notify-tabs-bar">
+            <button class="notify-tab active" id="tabAll" onclick="setNotifyFilter('all')">
+              <span>All Activity</span>
+            </button>
+            <button class="notify-tab" id="tabRequests" onclick="setNotifyFilter('requests')">
+              <span>Invitations</span>
+              <span class="notify-tab-badge" id="reqCountTag">0</span>
+            </button>
+            <button class="notify-tab" id="tabMentions" onclick="setNotifyFilter('mentions')">
+              <span>Mentions</span>
+            </button>
+            <button class="notify-tab" id="tabSystem" onclick="setNotifyFilter('system')">
+              <span>System</span>
+            </button>
+          </div>
+
+          <div id="notificationsFeed" class="notifications-feed"></div>
+        </div>
+      </div>
+
+      <!-- Active Chat Panel -->
+      <div id="chatView">
+        <!-- Integrated Chat Header -->
+        <header class="chat-header">
+          <div class="chat-header-left">
+            <button class="icon-btn mobile-menu-btn" onclick="toggleLeft()" title="Open Channels Menu">
+              <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div class="chat-header-info">
+              <div class="chat-title-row">
+                <span class="chat-prefix-symbol">#</span>
+                <span class="chat-title" id="chatTitle">Public Group</span>
+                <span class="room-chip" id="roomChip" style="display:none" onclick="toggleRight()" title="Space details"># public</span>
+                <span class="e2ee-badge" id="e2eeBadge" style="display:none" title="End-to-End Encrypted Space">🔒 E2EE</span>
+              </div>
+              <div class="chat-sub" id="chatSub">Open channel · 48h auto-purge</div>
+            </div>
+          </div>
+
+          <div class="chat-header-actions">
+            <!-- Audio / Video Call Controls -->
+            <button class="icon-btn" id="btnAudioCall" onclick="startAudioCall()" title="Voice Call" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <button class="icon-btn" id="btnVideoCall" onclick="startVideoCall()" title="Video Call" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            </button>
+            <!-- In-Chat Message Search -->
+            <button class="icon-btn" id="btnChatSearch" onclick="toggleMessageSearch()" title="Search in this conversation (Ctrl+F)">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+            <!-- Hidden button to satisfy notify center reference -->
+            <button id="btnNotifyCenter" style="display:none" onclick="showNotifications()"></button>
+            <button class="icon-btn" id="headerInfoBtn" onclick="toggleRight()" title="Space Details &amp; Inspector">
+              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </button>
+            <button class="icon-btn" id="toggleRightBtn" style="display:none" onclick="toggleRight()" title="Toggle Members Inspector"></button>
+          </div>
+        </header>
+
+        <!-- In-Chat Message Search Bar -->
+        <div class="inchat-search-bar" id="inchatSearchBar" style="display:none">
+          <div class="inchat-search-inner">
+            <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="inchatSearchInput" placeholder="Find in messages… (Enter for next, Esc to close)" autocomplete="off" oninput="runMessageSearch(this.value)" onkeydown="onMessageSearchKeyDown(event)" />
+            <span class="inchat-match-count" id="inchatMatchCount">0 of 0</span>
+            <button class="inchat-nav-btn" onclick="navMessageSearch(-1)" title="Previous match (Shift+Enter)">▲</button>
+            <button class="inchat-nav-btn" onclick="navMessageSearch(1)" title="Next match (Enter)">▼</button>
+            <button class="inchat-close-btn" onclick="closeMessageSearch()" title="Close search (Esc)">✕</button>
+          </div>
+        </div>
+        
+        <div class="event-ticker" id="eventTicker">
+          <div class="event-ticker-dot"></div>
+          <span id="eventTickerText">System status</span>
+        </div>
+
+        <!-- Chat Stream -->
+        <div class="messages" id="messages"></div>
+        
+        <!-- Typing Bar -->
+        <div class="typing-bar" id="typingBar">
+          <span id="typingUser">User</span> is typing
+          <div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
+        </div>
+
+        <!-- Reply Drawer -->
+        <div class="reply-dock" id="replyDock">
+          <div class="reply-dock-content">
+            <span class="reply-dock-icon">↩</span>
+            <div class="reply-dock-meta">
+              <div class="reply-target-user" id="replyTargetUser">Replying to @user</div>
+              <div class="reply-target-text" id="replyTargetText">Sample text</div>
+            </div>
+          </div>
+          <button class="reply-dock-close" onclick="cancelReply()" title="Cancel reply">✕</button>
+        </div>
+
+        <div class="mention-menu" id="mentionMenu"></div>
+
+        <!-- Floating Composer -->
+        <div class="composer-dock">
+          <div class="composer">
+            <input type="file" id="fileInput" style="display:none" onchange="uploadSelectedFile(this)" />
+            <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="Attach File or Media">
+              <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <input id="chatInput" placeholder="Message this space… (type @ to mention)" autocomplete="off" oninput="onComposerInput(this)" onkeydown="onComposerKeyDown(event)" />
+            <button class="send-btn" onclick="sendMsg()" title="Send message">
+              <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 4. RIGHT MEMBER & SPACE DETAILS PANEL -->
+    <aside class="side-right" id="rightPanel">
+      <div class="inspector-shell">
+        <!-- Panel Header with Close Button -->
+        <div class="inspector-header">
+          <div class="inspector-header-title">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Space Overview</span>
+          </div>
+          <button class="inspector-close-btn" onclick="toggleRight()" title="Close details panel">✕</button>
+        </div>
+
+        <div class="inspector-scroll-area">
+          <!-- Space Profile Card -->
+          <div class="space-profile-card">
+            <div class="space-profile-banner"></div>
+            <div class="space-profile-content">
+              <div class="space-profile-avatar" id="inspectAvatar">#</div>
+              <div class="space-profile-meta">
+                <h3 class="space-profile-name" id="inspectName">Public Group</h3>
+                <div class="space-profile-badge-row">
+                  <span class="space-type-chip" id="inspectSub">Public Channel</span>
+                  <span class="space-purge-chip">⏱ 48h Purge</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="space-action-bar" id="inspectActions">
+              <button class="space-act-btn" onclick="copySpaceKey()" id="btnCopyKey" title="Copy Space Key">
+                <span>🔑 Copy Key</span>
+              </button>
+              <button class="space-act-btn" onclick="openRoomInfo()" title="Channel Details &amp; Settings">
+                <span>⚙️ Settings</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Channel Intelligence & Details -->
+          <div class="inspector-section">
+            <div class="inspector-section-label">SPACE DETAILS</div>
+            <div class="space-info-box">
+              <div class="space-info-row">
+                <span class="space-info-key">Channel Type</span>
+                <span class="space-info-val" id="inspectRoomType">Open Public</span>
+              </div>
+              <div class="space-info-row">
+                <span class="space-info-key">Security</span>
+                <span class="space-info-val" id="inspectEncryption">TLS 1.3 In-Transit</span>
+              </div>
+              <div class="space-info-row">
+                <span class="space-info-key">Created By</span>
+                <span class="space-info-val" id="inspectCreator">@Global Channel</span>
+              </div>
+              <div class="space-info-row">
+                <span class="space-info-key">Privacy</span>
+                <span class="space-info-val" id="inspectPrivacy">Live Stream</span>
+              </div>
+              <div class="space-info-row">
+                <span class="space-info-key">Retention</span>
+                <span class="space-info-val" id="inspectRetention">48-Hour Auto-Purge</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Members Roster Section -->
+          <div class="inspector-section">
+            <div class="roster-header">
+              <div class="roster-header-left">
+                <span>MEMBERS</span>
+                <span id="inspectCount" class="roster-badge">1</span>
+              </div>
+            </div>
+
+            <!-- Member Search -->
+            <div class="roster-search-wrap">
+              <input type="text" id="rosterSearchInput" placeholder="Filter members…" oninput="filterRoster(this.value)" />
+            </div>
+
+            <div id="inspectRoster" class="roster-list"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/crypto.js"></script>
+<script src="/js/webrtc.js"></script>
+<script src="/js/ui-shell.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/ephemeral.js"></script>
+<script src="/js/directory.js"></script>
+<script src="/js/notifications.js"></script>
+<script src="/js/rooms.js"></script>
+<script src="/js/chat.js"></script>
+</body>
+</html>

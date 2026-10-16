@@ -1,0 +1,17 @@
+1. install requirements
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+2.a. run the project 
+python run.py
+b. directly via uvicorn 
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+3. deactivate
+ctrl + c
+
+4. clean database
+Remove-Item -Recurse -Force chat.db*, uploads\*
+
+5. Cloudflare Quick tunnel
+cloudflared tunnel --url _________________________
